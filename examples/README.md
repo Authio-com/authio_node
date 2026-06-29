@@ -1,12 +1,13 @@
 # @useauthio/node examples
 
-Three minimal, runnable backends that demonstrate verifying Authio sessions and managing organizations + memberships against the live Management API.
+Four minimal, runnable backends that demonstrate verifying Authio sessions and managing organizations + memberships against the live Management API.
 
 | Directory | Stack | What it shows |
 |---|---|---|
 | [`express`](./express) | Express 4 | Bearer-token verification, list memberships, create organization |
 | [`hono`](./hono) | Hono on Node | Same as Express but with the Hono ergonomics |
 | [`nextjs-route-handler`](./nextjs-route-handler) | Next.js 15 App Router | Pure server-side handlers; pairs with `@useauthio/nextjs` for middleware |
+| [`integrator-byok`](./integrator-byok) | Next.js 15 App Router | Multi-tenant BYOK: validate, encrypt, store `sk_live_`, sync users |
 
 ## Run any of them
 
