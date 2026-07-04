@@ -1,0 +1,45 @@
+{
+  "name": "@useauthio/platform-secrets",
+  "version": "0.1.0",
+  "description": "Bootstrap process.env from AWS Secrets Manager JSON bundles at Node service startup.",
+  "author": "Authio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Authio-com/authio_node.git",
+    "directory": "packages/platform-secrets"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --out-dir dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1053.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
