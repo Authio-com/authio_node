@@ -84,10 +84,14 @@ export async function handler(req: Request) {
 `session.orgId` represents the currently-active organization for the request. A session is *user-scoped* — `session.userId` is the same regardless of which org the user is in. To switch:
 
 ```ts
-await authio.sessions.switchOrg(sessionId, { organizationId: "org_..." });
+await authio.sessions.switchOrg(userAccessToken, { organizationId: "org_..." });
 ```
 
 This mints a new session bound to a different org without re-authenticating the user.
+The first argument must be the signed-in user's access JWT. Older examples
+labelled it `sessionId`; those calls sent the SDK secret key to the Management
+API and could not securely authorize a user session mutation. Pass the access
+token for both `switchOrg()` and `revoke()`.
 
 ## Refresh tokens (BFF cookie auto-renewal)
 

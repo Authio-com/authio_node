@@ -145,6 +145,47 @@ export class Authio {
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
   }
+
+  async authCoreRequest<T>(
+    method: string,
+    path: string,
+    accessToken: string,
+    body?: unknown,
+  ): Promise<T> {
+    if (!accessToken) {
+      throw new Error("Authio: a user access token is required");
+    }
+    const fetchFn = this.options.fetch ?? globalThis.fetch;
+    const res = await fetchFn(`${this.authCoreUrl}${path}`, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        "user-agent": "authio-node/0.2.0",
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as {
+        code?: string;
+        error?: string;
+        message?: string;
+        error_description?: string;
+        request_id?: string;
+      };
+      throw new AuthioError({
+        code: data.code ?? data.error ?? "request_failed",
+        message:
+          data.message ??
+          data.error_description ??
+          `Request failed with status ${res.status}`,
+        status: res.status,
+        requestId: data.request_id,
+      });
+    }
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  }
 }
 
 class UsersAPI {
@@ -507,19 +548,34 @@ class SessionsAPI {
     }
   }
 
-  /** Pivot a session into a different organization without re-authentication. */
-  switchOrg(_sessionId: string, input: { organizationId: string }) {
-    return this.client.request<Session>(
+  /**
+   * Pivot the current user session into another organization.
+   *
+   * The first argument is the user's access JWT, not a session ID or the
+   * Authio secret key. Auth-core authorizes the pivot from that JWT.
+   */
+  switchOrg(accessToken: string, input: { organizationId: string }) {
+    return this.client.authCoreRequest<Session>(
       "POST",
       "/v1/sessions/switch-org",
+      accessToken,
       { organization_id: input.organizationId },
     );
   }
 
-  revoke(sessionId: string) {
-    return this.client.request<void>("POST", "/v1/sessions/revoke", {
-      session_id: sessionId,
-    });
+  /**
+   * Revoke the session represented by a user access JWT.
+   *
+   * @deprecated Passing a session ID was never securely actionable from this
+   * SDK. Pass the session's access token instead.
+   */
+  revoke(accessToken: string) {
+    return this.client.authCoreRequest<void>(
+      "POST",
+      "/v1/sessions/revoke",
+      accessToken,
+      {},
+    );
   }
 
   /**
