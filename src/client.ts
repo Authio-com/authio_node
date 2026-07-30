@@ -36,6 +36,7 @@ export class Authio {
   readonly organizations = new OrganizationsAPI(this);
   readonly memberships = new MembershipsAPI(this);
   readonly locate = new LocateAPI(this);
+  readonly signinAttempts = new SignInAttemptsAPI(this);
   readonly portal = new PortalAPI(this);
   readonly events = new EventsAPI(this);
   readonly flags = new FlagsAPI(this);
@@ -667,6 +668,8 @@ export interface LocateVerifyInput {
   cf_country?: string;
   idempotency_key?: string;
   risk_decision_id?: string;
+  /** Optional link to a mid-ceremony auth_signin_attempts row. */
+  signin_attempt_id?: string;
   context?: Record<string, unknown>;
   client_location?: {
     latitude: number;
@@ -710,5 +713,87 @@ class LocateAPI {
 
   updatePolicy(body: Record<string, unknown>) {
     return this.client.request<{ ok: true }>("PUT", "/v1/locate/policy", body);
+  }
+}
+
+/** Filters for GET /v1/signin-attempts (sk_ API). */
+export interface SignInAttemptsListInput {
+  user_id?: string;
+  outcome?: string;
+  method?: string;
+  has_hop_anomaly?: boolean;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface SignInAttemptHop {
+  id: string;
+  attempt_id: string;
+  project_id: string;
+  stage: string;
+  seq: number;
+  occurred_at: string;
+  ip: string | null;
+  ip_country: string | null;
+  ip_region: string | null;
+  asn: number | null;
+  asn_org: string | null;
+  network_type: string;
+  network_confidence: string;
+  user_agent_family: string | null;
+  actor_kind: string;
+  signals: Record<string, unknown>;
+}
+
+export interface SignInAttempt {
+  id: string;
+  project_id: string;
+  user_id: string | null;
+  method: string;
+  outcome: string;
+  stage: string;
+  hop_count?: number;
+  hop_anomalies?: string[];
+  hops?: SignInAttemptHop[];
+  initiated_at: string;
+  [key: string]: unknown;
+}
+
+export interface SignInAttemptsListResult {
+  data: SignInAttempt[];
+  next_cursor: string | null;
+}
+
+/**
+ * Auth ceremony introspection (hop timeline + observe-only anomalies).
+ * Distinct from Locate verify — use locate.verify for wager/geo gating.
+ */
+class SignInAttemptsAPI {
+  constructor(private readonly client: Authio) {}
+
+  list(input: SignInAttemptsListInput = {}) {
+    const q = new URLSearchParams();
+    for (const [key, value] of Object.entries(input)) {
+      if (value === undefined || value === "") continue;
+      if (key === "has_hop_anomaly") {
+        q.set(key, value ? "1" : "0");
+        continue;
+      }
+      q.set(key, String(value));
+    }
+    const suffix = q.size ? `?${q.toString()}` : "";
+    return this.client.request<SignInAttemptsListResult>(
+      "GET",
+      `/v1/signin-attempts${suffix}`,
+    );
+  }
+
+  get(id: string) {
+    return this.client.request<SignInAttempt>(
+      "GET",
+      `/v1/signin-attempts/${encodeURIComponent(id)}`,
+    );
   }
 }

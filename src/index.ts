@@ -2,6 +2,10 @@ export { Authio, type AuthioOptions, hasFlag } from "./client";
 export type {
   LocateVerifyInput,
   LocateVerifyResult,
+  SignInAttempt,
+  SignInAttemptHop,
+  SignInAttemptsListInput,
+  SignInAttemptsListResult,
   GenerateLinkInput,
   GenerateLinkResult,
   AuthioEvent,
