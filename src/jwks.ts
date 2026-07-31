@@ -30,7 +30,13 @@ export type AuthioClaims<TClaims extends Record<string, unknown> = Record<string
     token_type?: "user" | "m2m";
     /** Public client_id on M2M tokens (also stamped into `sub`). */
     client_id?: string;
-    /** Project_id on M2M tokens. */
+    /**
+     * The Authio project (tenant) this token was minted for.
+     *
+     * Present on M2M tokens, and on user tokens issued after the
+     * 2026-07 auth-core release. Configure `projectId` on the client
+     * to have the SDK check it — see {@link JwtVerifier}.
+     */
     project_id?: string;
     /** Array form of OAuth-2 scopes on M2M tokens. */
     scopes?: string[];
@@ -56,14 +62,31 @@ export type AuthioClaims<TClaims extends Record<string, unknown> = Record<string
 /**
  * Verifier wraps a remote JWKS fetcher with caching. Spawn one per
  * `apiUrl` and reuse — fetching JWKS on every request is wasteful.
+ *
+ * ## Why you should set `projectId`
+ *
+ * Authio signs every tenant's tokens with the same key, issuer and
+ * audience. Signature, `iss` and `aud` therefore prove the token came
+ * from Authio — they do NOT prove it was minted for *your* project.
+ * Without a tenant check, someone who signs up for their own Authio
+ * project, creates a user called `ceo@your-company.com` there, and
+ * sends you that token passes every other check in this verifier.
+ *
+ * Passing `projectId` closes that: a token naming a different project
+ * is rejected. Leave it unset and you keep the old behaviour, with a
+ * one-time warning.
  */
 export class JwtVerifier {
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
+  /** One-time warning latches, so a busy server logs once, not per request. */
+  private warnedNoProjectConfigured = false;
+  private warnedClaimAbsent = false;
 
   constructor(
     private readonly apiUrl: string,
     private readonly issuer: string,
     private readonly audience: string,
+    private readonly projectId?: string,
   ) {
     this.jwks = createRemoteJWKSet(
       new URL(this.apiUrl.replace(/\/$/, "") + "/v1/auth/.well-known/jwks.json"),
@@ -90,6 +113,57 @@ export class JwtVerifier {
     if (!payload.sub) {
       throw new Error("authio: token missing sub claim");
     }
+    this.assertTenant(payload);
     return payload as AuthioClaims<TClaims>;
+  }
+
+  /**
+   * Tenant binding.
+   *
+   * A MISMATCH is rejected outright: the token demonstrably belongs to
+   * another project, which is the cross-tenant forgery this check
+   * exists for, and no legitimate token for your project can look like
+   * that.
+   *
+   * An ABSENT claim only warns. Tokens minted before the auth-core
+   * release that added `project_id` do not carry it, and they are
+   * still live until every session issued before that deploy has
+   * expired. Failing them would sign out real users to defend against
+   * a token an attacker cannot actually obtain any more. This softness
+   * is temporary — a later release turns it into a rejection once
+   * those tokens have aged out.
+   */
+  private assertTenant(payload: JWTPayload): void {
+    const claimed = typeof payload.project_id === "string" ? payload.project_id : undefined;
+
+    if (!this.projectId) {
+      if (!this.warnedNoProjectConfigured) {
+        this.warnedNoProjectConfigured = true;
+        console.warn(
+          "authio: no projectId configured, so tokens are not checked against your tenant. " +
+            "Any Authio-issued token will verify here, including one minted in someone else's project. " +
+            "Pass projectId to the Authio client to enable the check.",
+        );
+      }
+      return;
+    }
+
+    if (claimed === undefined) {
+      if (!this.warnedClaimAbsent) {
+        this.warnedClaimAbsent = true;
+        console.warn(
+          "authio: token carries no project_id claim, so it could not be checked against your tenant. " +
+            "This is expected for sessions issued before 2026-07 and stops once they expire. " +
+            "A future SDK release will reject these.",
+        );
+      }
+      return;
+    }
+
+    if (claimed !== this.projectId) {
+      throw new Error(
+        `authio: token was issued for project ${claimed}, not ${this.projectId}`,
+      );
+    }
   }
 }

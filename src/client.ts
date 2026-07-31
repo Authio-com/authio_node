@@ -24,6 +24,20 @@ export interface AuthioOptions {
   jwtIssuer?: string;
   /** JWT audience to require. */
   jwtAudience?: string;
+  /**
+   * Your Authio project id (`proj_…`). Strongly recommended.
+   *
+   * Every tenant's tokens are signed with the same key, issuer and
+   * audience, so those three prove a token came from Authio but not
+   * that it was minted for you. With `projectId` set, a token naming a
+   * different project is rejected — which is what stops someone from
+   * creating `ceo@your-company.com` in their own Authio project and
+   * presenting that token to your backend.
+   *
+   * Omit it and verification behaves as before, with a one-time
+   * warning.
+   */
+  projectId?: string;
   fetch?: typeof fetch;
 }
 
@@ -66,6 +80,7 @@ export class Authio {
       this.authCoreUrl,
       options.jwtIssuer ?? DEFAULT_ISSUER,
       options.jwtAudience ?? DEFAULT_AUDIENCE,
+      options.projectId,
     );
     this.sessions = new SessionsAPI(this, this.verifier);
   }
