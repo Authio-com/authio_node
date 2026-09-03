@@ -158,6 +158,15 @@ Customers can configure three knobs per organization on the dashboard `/orgs/<id
 
 A zero value on any knob means "inherit the project default". The strictest non-zero gate wins on every refresh.
 
+Backends that host their own sign-in UI (not Authio hosted-UI) can read the live values with an API key:
+
+```ts
+const { policy, effective } = await authio.organizations.getPolicy("org_...");
+// effective.session_idle_timeout_min is minutes, or null if unconstrained
+```
+
+`GET /v1/organizations/:id/policy` is read-only. Writes stay on the dashboard (`/orgs/<id>/security`).
+
 ## License
 
 MIT
