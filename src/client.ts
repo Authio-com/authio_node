@@ -4,6 +4,7 @@ import type {
   ClientCredentialsInput,
   Membership,
   Organization,
+  OrgPolicyResponse,
   Session,
   SessionEnvelope,
   TokenResponse,
@@ -227,6 +228,18 @@ class OrganizationsAPI {
   }
   get(orgId: string) {
     return this.client.request<Organization>("GET", `/v1/organizations/${orgId}`);
+  }
+  /**
+   * Read the org's auth + session policy (idle / absolute / refresh /
+   * access-token TTL). Use `effective` to drive client idle timers so
+   * they match what Authio enforces at refresh. Requires `sk_` and
+   * `organizations:read`.
+   */
+  getPolicy(orgId: string) {
+    return this.client.request<OrgPolicyResponse>(
+      "GET",
+      `/v1/organizations/${orgId}/policy`,
+    );
   }
 }
 

@@ -38,6 +38,44 @@ export interface Membership {
 }
 
 /**
+ * Stored org_policies row. Session knobs of `0` mean inherit / no
+ * org override. Use `effective` on OrgPolicyResponse for resolved
+ * values a custom login UI can act on.
+ */
+export interface OrgPolicy {
+  organization_id: string;
+  project_id: string;
+  require_sso: boolean;
+  require_mfa: boolean;
+  require_passkey: boolean;
+  session_idle_timeout_min: number;
+  session_absolute_max_min: number;
+  refresh_window_min: number;
+  access_token_ttl_min: number;
+  allowed_ip_cidrs: string[];
+  blocked_countries: string[];
+  disabled_methods: string[];
+  mfa_allowed_methods: string[];
+  allow_signup: boolean;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface EffectiveSessionPolicy {
+  /** Minutes, or null when Authio will not enforce an idle cap. */
+  session_idle_timeout_min: number | null;
+  session_absolute_max_min: number | null;
+  refresh_window_min: number | null;
+  /** Always a number. Org override, else the project default (15). */
+  access_token_ttl_min: number;
+}
+
+export interface OrgPolicyResponse {
+  policy: OrgPolicy;
+  effective: EffectiveSessionPolicy;
+}
+
+/**
  * A verified Authio session.
  *
  * The session always identifies the *user* (`userId`); the active

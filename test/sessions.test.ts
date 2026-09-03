@@ -63,3 +63,35 @@ describe("authio.sessions user-authenticated mutations", () => {
     );
   });
 });
+
+describe("authio.organizations.getPolicy", () => {
+  it("GETs /v1/organizations/:id/policy with the secret key", async () => {
+    const fetch = vi.fn(async () =>
+      Response.json({
+        policy: { organization_id: "org_1", session_idle_timeout_min: 30 },
+        effective: {
+          session_idle_timeout_min: 30,
+          session_absolute_max_min: null,
+          refresh_window_min: null,
+          access_token_ttl_min: 15,
+        },
+      }),
+    );
+    const authio = new Authio({
+      apiKey: "sk_test_abc",
+      apiUrl: "https://manage.test",
+      fetch,
+    });
+    const res = await authio.organizations.getPolicy("org_1");
+    expect(res.effective.session_idle_timeout_min).toBe(30);
+    expect(fetch).toHaveBeenCalledWith(
+      "https://manage.test/v1/organizations/org_1/policy",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer sk_test_abc",
+        }),
+      }),
+    );
+  });
+});
