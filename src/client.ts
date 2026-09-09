@@ -1,5 +1,6 @@
 import { AuthioError } from "./errors";
 import { JwtVerifier } from "./jwks";
+import type { SessionDenylist } from "./webhook";
 import type {
   ClientCredentialsInput,
   Membership,
@@ -39,6 +40,13 @@ export interface AuthioOptions {
    * warning.
    */
   projectId?: string;
+  /**
+   * Session denylist fed by `handleAuthioWebhook` on session.revoked
+   * webhooks (revocation-signals Phase 1). When set, verifyToken /
+   * sessions.verify reject structurally valid JWTs whose sid was
+   * revoked. Use a shared adapter (Redis) on multi-instance deploys.
+   */
+  sessionDenylist?: SessionDenylist;
   fetch?: typeof fetch;
 }
 
@@ -82,6 +90,7 @@ export class Authio {
       options.jwtIssuer ?? DEFAULT_ISSUER,
       options.jwtAudience ?? DEFAULT_AUDIENCE,
       options.projectId,
+      options.sessionDenylist,
     );
     this.sessions = new SessionsAPI(this, this.verifier);
   }
