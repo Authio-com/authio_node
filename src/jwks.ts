@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
+import type { SessionDenylist } from "./webhook";
 
 /**
  * Authio access-token claim shape.
@@ -87,6 +88,14 @@ export class JwtVerifier {
     private readonly issuer: string,
     private readonly audience: string,
     private readonly projectId?: string,
+    /**
+     * Session denylist fed by `handleAuthioWebhook` on session.revoked
+     * webhooks (revocation-signals Phase 1). When set, a structurally
+     * valid token whose `sid` is denylisted is rejected — closing the
+     * window where an offline-verified JWT outlives its revoked Authio
+     * session. Use a shared adapter (Redis) on multi-instance deploys.
+     */
+    private readonly sessionDenylist?: SessionDenylist,
   ) {
     this.jwks = createRemoteJWKSet(
       new URL(this.apiUrl.replace(/\/$/, "") + "/v1/auth/.well-known/jwks.json"),
@@ -114,6 +123,17 @@ export class JwtVerifier {
       throw new Error("authio: token missing sub claim");
     }
     this.assertTenant(payload);
+    // Revocation-signals Phase 1: refuse tokens whose session was
+    // revoked (session.revoked webhook → denylist). Only when a
+    // denylist was configured; absent one, behaviour is unchanged.
+    if (
+      this.sessionDenylist &&
+      typeof payload.sid === "string" &&
+      payload.sid &&
+      (await this.sessionDenylist.has(payload.sid))
+    ) {
+      throw new Error("authio: session revoked");
+    }
     return payload as AuthioClaims<TClaims>;
   }
 

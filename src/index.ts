@@ -28,3 +28,11 @@ export type {
   ClientCredentialsInput,
 } from "./types";
 export { AuthioError } from "./errors";
+export {
+  handleAuthioWebhook,
+  verifyAuthioWebhookSignature,
+  MemorySessionDenylist,
+  type SessionDenylist,
+  type AuthioWebhookEvent,
+  type HandleAuthioWebhookOptions,
+} from "./webhook";
