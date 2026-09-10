@@ -14,6 +14,12 @@ export type {
   EvaluateFlagsInput,
   EvaluateFlagsResult,
 } from "./client";
+export {
+  generateDPoPKey,
+  createDPoPProof,
+  publicJWK,
+  type DPoPKey,
+} from "./dpop";
 export { JwtVerifier, type AuthioClaims } from "./jwks";
 export type {
   Session,

@@ -1,4 +1,5 @@
 import { AuthioError } from "./errors";
+import { createDPoPProof, type DPoPKey } from "./dpop";
 import { JwtVerifier } from "./jwks";
 import type { SessionDenylist } from "./webhook";
 import type {
@@ -661,7 +662,16 @@ class SessionsAPI {
    * }
    * ```
    */
-  async refresh(input: { refreshToken: string }): Promise<SessionEnvelope> {
+  async refresh(input: {
+    refreshToken: string;
+    /**
+     * DPoP private key (RFC 9449) for sessions bound at issuance —
+     * see `generateDPoPKey()`. When set, the refresh carries a fresh
+     * proof-of-possession header; auth-core refuses bound sessions
+     * without one (`invalid_dpop_proof`).
+     */
+    dpopKey?: DPoPKey;
+  }): Promise<SessionEnvelope> {
     if (!input?.refreshToken) {
       throw new AuthioError({
         code: "missing_refresh_token",
@@ -670,11 +680,15 @@ class SessionsAPI {
       });
     }
     const fetchFn = this.client.options.fetch ?? globalThis.fetch;
-    const res = await fetchFn(`${this.client.authCoreUrl}/v1/auth/refresh`, {
+    const refreshUrl = `${this.client.authCoreUrl}/v1/auth/refresh`;
+    const res = await fetchFn(refreshUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "user-agent": "authio-node/0.1.0",
+        ...(input.dpopKey
+          ? { DPoP: await createDPoPProof(input.dpopKey, "POST", refreshUrl) }
+          : {}),
       },
       body: JSON.stringify({ refresh_token: input.refreshToken }),
     });
