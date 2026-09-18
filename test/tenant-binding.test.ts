@@ -96,26 +96,15 @@ describe("JwtVerifier tenant binding", () => {
     expect(claims.project_id).toBe("proj_victim");
   });
 
-  it("warns but still accepts a token with no project_id claim", async () => {
-    // Sessions issued before auth-core started stamping the claim are
-    // still live. Rejecting them would sign real users out to defend
-    // against a token that can no longer be obtained.
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("REFUSES a token with no project_id claim when a tenant is configured", async () => {
+    // Was warn-and-accept while pre-claim sessions were still live. The
+    // longest refresh window is 30 days, so those expired long ago, and
+    // the softness meant a token without the claim skipped the only
+    // check that attributes it to this tenant.
     const token = await mint({ sub: "user_legacy", sid: "sess_1" });
     const verifier = new JwtVerifier(apiUrl, ISSUER, AUDIENCE, "proj_victim");
 
-    const claims = await verifier.verify(token);
-    expect(claims.sub).toBe("user_legacy");
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/no project_id claim/));
-  });
-
-  it("warns only once about an absent claim, not per request", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const verifier = new JwtVerifier(apiUrl, ISSUER, AUDIENCE, "proj_victim");
-    for (let i = 0; i < 3; i++) {
-      await verifier.verify(await mint({ sub: "user_legacy", sid: `sess_${i}` }));
-    }
-    expect(warn).toHaveBeenCalledTimes(1);
+    await expect(verifier.verify(token)).rejects.toThrow(/no project_id claim/);
   });
 
   it("warns when no projectId is configured, and stays permissive", async () => {
@@ -139,5 +128,75 @@ describe("JwtVerifier tenant binding", () => {
     const verifier = new JwtVerifier(apiUrl, ISSUER, AUDIENCE, "proj_victim");
 
     await expect(verifier.verify(wrongIssuer)).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------
+// Security audit 2026-09-18 (SDK-4). projectId was optional AND
+// undocumented for verification, so the tenant check was effectively off
+// for everyone. It now defaults from AUTHIO_PROJECT_ID — the same var the
+// docs already tell people to set.
+// ---------------------------------------------------------------------
+
+describe("Authio client env defaults", () => {
+  const saved = {
+    project: process.env.AUTHIO_PROJECT_ID,
+    secret: process.env.AUTHIO_SECRET_KEY,
+  };
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries({
+      AUTHIO_PROJECT_ID: saved.project,
+      AUTHIO_SECRET_KEY: saved.secret,
+    })) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  /** The verifier holds the resolved binding; options holds what was passed. */
+  function verifierProjectId(client: unknown): string | undefined {
+    return (client as { verifier: { projectId?: string } }).verifier.projectId;
+  }
+
+  it("takes projectId from AUTHIO_PROJECT_ID when not passed", async () => {
+    process.env.AUTHIO_PROJECT_ID = "proj_from_env";
+    const { Authio } = await import("../src/client");
+    const client = new Authio({ apiKey: "sk_live_x" });
+    expect(verifierProjectId(client)).toBe("proj_from_env");
+  });
+
+  it("an explicit projectId still wins over the env var", async () => {
+    process.env.AUTHIO_PROJECT_ID = "proj_from_env";
+    const { Authio } = await import("../src/client");
+    const client = new Authio({ apiKey: "sk_live_x", projectId: "proj_explicit" });
+    expect(verifierProjectId(client)).toBe("proj_explicit");
+  });
+
+  it("leaves the binding unset when AUTHIO_PROJECT_ID is absent", async () => {
+    delete process.env.AUTHIO_PROJECT_ID;
+    const { Authio } = await import("../src/client");
+    const client = new Authio({ apiKey: "sk_live_x" });
+    expect(verifierProjectId(client)).toBeUndefined();
+  });
+
+  it("takes apiKey from AUTHIO_SECRET_KEY when not passed", async () => {
+    process.env.AUTHIO_SECRET_KEY = "sk_live_from_env";
+    const { Authio } = await import("../src/client");
+    const client = new Authio({});
+    expect(client.apiKey).toBe("sk_live_from_env");
+  });
+
+  it("an explicit apiKey still wins over the env var", async () => {
+    process.env.AUTHIO_SECRET_KEY = "sk_live_from_env";
+    const { Authio } = await import("../src/client");
+    const client = new Authio({ apiKey: "sk_live_explicit" });
+    expect(client.apiKey).toBe("sk_live_explicit");
+  });
+
+  it("still throws when neither an apiKey nor AUTHIO_SECRET_KEY is present", async () => {
+    delete process.env.AUTHIO_SECRET_KEY;
+    const { Authio } = await import("../src/client");
+    expect(() => new Authio({})).toThrow(/apiKey is required/);
   });
 });
