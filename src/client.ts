@@ -14,7 +14,8 @@ import type {
 } from "./types";
 
 export interface AuthioOptions {
-  apiKey: string;
+  /** Secret key. Falls back to the `AUTHIO_SECRET_KEY` env var. */
+  apiKey?: string;
   apiUrl?: string;
   /**
    * The auth-core base URL (where /v1/auth/.well-known/jwks.json and
@@ -55,6 +56,19 @@ const DEFAULT_API_URL = "https://manage.authio.com";
 const DEFAULT_ISSUER = "https://identity.authio.com";
 const DEFAULT_AUDIENCE = "authio";
 
+/**
+ * Read a server env var without assuming a Node global exists (this
+ * package is also consumed from edge/worker runtimes).
+ */
+function envVar(name: string): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = (globalThis as any).process as
+    | { env?: Record<string, string | undefined> }
+    | undefined;
+  const v = p?.env?.[name]?.trim();
+  return v || undefined;
+}
+
 export class Authio {
   readonly users = new UsersAPI(this);
   readonly organizations = new OrganizationsAPI(this);
@@ -66,17 +80,32 @@ export class Authio {
   readonly flags = new FlagsAPI(this);
   readonly sessions: SessionsAPI;
 
+  /** The resolved secret key (from options or AUTHIO_SECRET_KEY). */
+  readonly apiKey: string;
+
   /** The auth-core base URL used for the JWKS + token endpoint. */
   readonly authCoreUrl: string;
 
   private readonly verifier: JwtVerifier;
 
   constructor(public readonly options: AuthioOptions) {
-    if (!options.apiKey) {
+    // The error below has always told people to "set AUTHIO_SECRET_KEY",
+    // and every docs example reads it, but nothing here actually looked
+    // at it — passing it in code was the only thing that worked.
+    const apiKey = options.apiKey ?? envVar("AUTHIO_SECRET_KEY");
+    if (!apiKey) {
       throw new Error(
         "Authio: apiKey is required. Pass it directly or set AUTHIO_SECRET_KEY.",
       );
     }
+    this.apiKey = apiKey;
+    // Tenant binding defaults to AUTHIO_PROJECT_ID. Every tenant's tokens
+    // share one signing key, issuer and audience, so project_id is the
+    // only claim separating your users from someone else's Authio
+    // project — and sign-up is self-serve, so a valid foreign token is
+    // free to obtain. Defaulting from the env var means an app that
+    // configured it the way the docs ask is bound with no extra code.
+    const projectId = options.projectId ?? envVar("AUTHIO_PROJECT_ID");
     const apiUrl = options.apiUrl ?? DEFAULT_API_URL;
     // auth-core lives at a different origin than management-api in
     // production (api.authio.com vs auth-api.authio.com). Callers
@@ -90,7 +119,7 @@ export class Authio {
       this.authCoreUrl,
       options.jwtIssuer ?? DEFAULT_ISSUER,
       options.jwtAudience ?? DEFAULT_AUDIENCE,
-      options.projectId,
+      projectId,
       options.sessionDenylist,
     );
     this.sessions = new SessionsAPI(this, this.verifier);
@@ -152,7 +181,7 @@ export class Authio {
       headers: {
         "content-type": "application/json",
         "user-agent": "authio-node/0.1.0",
-        authorization: `Bearer ${this.options.apiKey}`,
+        authorization: `Bearer ${this.apiKey}`,
       },
       body: body ? JSON.stringify(body) : undefined,
     });

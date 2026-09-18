@@ -81,7 +81,6 @@ export class JwtVerifier {
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
   /** One-time warning latches, so a busy server logs once, not per request. */
   private warnedNoProjectConfigured = false;
-  private warnedClaimAbsent = false;
 
   constructor(
     private readonly apiUrl: string,
@@ -145,13 +144,11 @@ export class JwtVerifier {
    * exists for, and no legitimate token for your project can look like
    * that.
    *
-   * An ABSENT claim only warns. Tokens minted before the auth-core
-   * release that added `project_id` do not carry it, and they are
-   * still live until every session issued before that deploy has
-   * expired. Failing them would sign out real users to defend against
-   * a token an attacker cannot actually obtain any more. This softness
-   * is temporary — a later release turns it into a rejection once
-   * those tokens have aged out.
+   * An ABSENT claim is now also rejected. It was warn-only while
+   * pre-`project_id` sessions were still live; with a 30-day maximum
+   * refresh window those aged out long ago, and accepting an absent
+   * claim meant the one check that attributes a token to your tenant
+   * could be skipped by a token that simply did not carry it.
    */
   private assertTenant(payload: JWTPayload): void {
     const claimed = typeof payload.project_id === "string" ? payload.project_id : undefined;
@@ -169,15 +166,15 @@ export class JwtVerifier {
     }
 
     if (claimed === undefined) {
-      if (!this.warnedClaimAbsent) {
-        this.warnedClaimAbsent = true;
-        console.warn(
-          "authio: token carries no project_id claim, so it could not be checked against your tenant. " +
-            "This is expected for sessions issued before 2026-07 and stops once they expire. " +
-            "A future SDK release will reject these.",
-        );
-      }
-      return;
+      // Was warn-only during the rollout of the project_id claim, to
+      // avoid signing out sessions minted before auth-core emitted it.
+      // The longest refresh window is 30 days, so every such session
+      // expired well before 2026-09 and the softness is now pure
+      // downside: it let a token with the claim stripped or absent slip
+      // past the check that exists to catch exactly that.
+      throw new Error(
+        `authio: token carries no project_id claim, so it cannot be attributed to project ${this.projectId}`,
+      );
     }
 
     if (claimed !== this.projectId) {
