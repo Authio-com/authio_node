@@ -10,6 +10,40 @@ export interface User {
   updatedAt: string;
 }
 
+export interface UpdateUserInput {
+  name?: string;
+  externalId?: string;
+  /**
+   * Changes the sign-in address immediately. Use `requestEmailChange`
+   * instead when the new address has not been verified by your app.
+   * Rejected with `email_managed_by_idp` for SCIM / SSO users.
+   */
+  email?: string;
+  /**
+   * With `email`: whether the new address is already verified (default
+   * false). Without it: sets the current address's status.
+   */
+  emailVerified?: boolean;
+  /** With `email`: sign the user out everywhere. */
+  revokeSessions?: boolean;
+  /** With `email`: tell the old address it was replaced. */
+  notifyPreviousEmail?: boolean;
+}
+
+export type UpdatedUser = User & {
+  /** Present when `email` was sent; false if it was already the user's address. */
+  email_changed?: boolean;
+  sessions_revoked?: number;
+};
+
+export interface EmailChangeStarted {
+  sent: boolean;
+  /** The address the confirmation link went to. */
+  email: string;
+  /** When the link stops working. */
+  expires_at: string;
+}
+
 export interface Organization {
   id: string;
   projectId: string;
