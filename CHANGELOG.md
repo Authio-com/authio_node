@@ -4,6 +4,31 @@ All notable changes to `@useauthio/node` are documented here. This
 project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-10-10
+
+### Added
+- **Changing a user's email.** The email is the sign-in identifier, and
+  until now the SDK had no way to change it.
+  - `users.requestEmailChange(userId, { email })` emails a confirmation
+    link to the new address; the change applies when it is clicked, and
+    the old address is told. Requires `sk_`.
+  - `users.requestOwnEmailChange(accessToken, { email, code })` does the
+    same from the signed-in user's access token. `code` is their TOTP or
+    recovery code, required when they have one.
+  - `users.update(userId, { email, emailVerified, revokeSessions,
+    notifyPreviousEmail, name, externalId })` sets fields directly. With
+    `email`, the address changes immediately; use it when your app has
+    already verified the address.
+
+  Links and codes sent to the old address stop working, and a
+  `user.email.changed` webhook fires. Users whose email comes from SCIM
+  or SSO are refused with `email_managed_by_idp` (409).
+- Types `UpdateUserInput`, `UpdatedUser`, `EmailChangeStarted`.
+
+### Security
+- Dev dependency override `source-map-js >=1.2.2` (high-severity
+  advisory). Not shipped in the package.
+
 ## [0.5.0] — 2026-09-18
 
 ### Security
