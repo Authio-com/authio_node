@@ -4,12 +4,15 @@ import { JwtVerifier } from "./jwks";
 import type { SessionDenylist } from "./webhook";
 import type {
   ClientCredentialsInput,
+  EmailChangeStarted,
   Membership,
   Organization,
   OrgPolicyResponse,
   Session,
   SessionEnvelope,
   TokenResponse,
+  UpdatedUser,
+  UpdateUserInput,
   User,
 } from "./types";
 
@@ -253,6 +256,46 @@ class UsersAPI {
     return this.client.request<Membership[]>(
       "GET",
       `/v1/users/${userId}/memberships`,
+    );
+  }
+  /**
+   * Update a user. Passing `email` changes their sign-in address now:
+   * links and codes sent to the old address stop working. Requires `sk_`.
+   */
+  update(userId: string, input: UpdateUserInput) {
+    const body: Record<string, unknown> = {};
+    if (input.name !== undefined) body.name = input.name;
+    if (input.externalId !== undefined) body.external_id = input.externalId;
+    if (input.email !== undefined) body.email = input.email;
+    if (input.emailVerified !== undefined) body.email_verified = input.emailVerified;
+    if (input.revokeSessions !== undefined) body.revoke_sessions = input.revokeSessions;
+    if (input.notifyPreviousEmail !== undefined) {
+      body.notify_previous_email = input.notifyPreviousEmail;
+    }
+    return this.client.request<UpdatedUser>("PATCH", `/v1/users/${userId}`, body);
+  }
+  /**
+   * Email a confirmation link to `email`; the user's address changes
+   * when they click it, and the old address is notified. Requires `sk_`.
+   */
+  requestEmailChange(userId: string, input: { email: string }) {
+    return this.client.request<EmailChangeStarted>(
+      "POST",
+      `/v1/users/${userId}/email-change`,
+      { email: input.email },
+    );
+  }
+  /**
+   * Same as `requestEmailChange`, on behalf of the signed-in user, from
+   * their access token. `code` is their TOTP or recovery code; it is
+   * required when they have either (`step_up_required` otherwise).
+   */
+  requestOwnEmailChange(accessToken: string, input: { email: string; code?: string }) {
+    return this.client.authCoreRequest<EmailChangeStarted>(
+      "POST",
+      "/v1/auth/email/change",
+      accessToken,
+      input.code ? { email: input.email, code: input.code } : { email: input.email },
     );
   }
 }
