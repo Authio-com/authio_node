@@ -1,6 +1,6 @@
 {
   "name": "@useauthio/platform-secrets",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Bootstrap process.env from AWS Secrets Manager JSON bundles at Node service startup.",
   "author": "Authio",
   "license": "MIT",
